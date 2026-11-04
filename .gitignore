@@ -1,0 +1,7 @@
+.venv/
+.cursor/
+__pycache__/
+.pytest_cache/
+*.pyc
+web/node_modules/
+web/dist/
