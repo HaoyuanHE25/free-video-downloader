@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from pathlib import Path
@@ -17,6 +18,26 @@ from starlette.background import BackgroundTask
 from app import downloader
 from app.downloader import UserFacingError, fetch_cover, parse, validate_format_id, validate_public_url
 from app.jobs import store
+from app.summary_routes import router as summary_router
+
+
+def _load_env_file() -> None:
+    """把项目根目录 .env 补进环境变量。已有的进程变量优先，不覆盖。"""
+    path = Path(__file__).resolve().parent.parent / ".env"
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_env_file()
 
 app = FastAPI(title="随下", docs_url=None, redoc_url=None)
 app.add_middleware(
@@ -50,9 +71,15 @@ class DownloadRequest(BaseModel):
 
 
 @app.exception_handler(RequestValidationError)
-async def invalid_body(_request, exc: RequestValidationError):
+async def invalid_body(request, exc: RequestValidationError):
     fields = {str(part) for err in exc.errors() for part in err.get("loc", ())}
-    message = "清晰度选项无效" if "format_id" in fields and "url" not in fields else "链接无效"
+    path = getattr(getattr(request, "url", None), "path", "") or ""
+    if "question" in fields or path.startswith("/api/summary/ask"):
+        message = "问题无效，请检查后重试"
+    elif "format_id" in fields and "url" not in fields:
+        message = "清晰度选项无效"
+    else:
+        message = "链接无效"
     return JSONResponse(status_code=400, content={"detail": message})
 
 
@@ -126,6 +153,8 @@ def _public_url(url: str) -> str:
     except UserFacingError as exc:
         raise HTTPException(exc.status, exc.message) from exc
 
+
+app.include_router(summary_router)
 
 if _DIST.is_dir() and (_DIST / "index.html").is_file():
     app.mount("/", StaticFiles(directory=_DIST, html=True), name="site")

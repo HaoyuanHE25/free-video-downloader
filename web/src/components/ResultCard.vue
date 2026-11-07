@@ -53,84 +53,87 @@ function onAgain(event) {
 </script>
 
 <template>
-  <section class="mx-auto mt-8 w-full max-w-3xl" aria-live="polite">
-    <article class="rounded-xl border border-[rgba(28,25,23,0.06)] bg-card p-4 shadow-[0_12px_40px_rgba(120,72,32,0.08)] sm:p-5">
-      <p v-if="parsing" class="text-sm text-stone">正在读取标题和清晰度…</p>
+  <section class="mx-auto mt-2 w-full" aria-live="polite">
+    <article class="ink-band rounded-[18px] p-4 sm:p-5">
+      <p v-if="parsing" class="text-sm text-cream/55">正在读取标题和清晰度…</p>
 
-      <p v-else-if="error && !meta" class="text-base text-ink">{{ error }}</p>
+      <p v-else-if="error && !meta" class="rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-[#f3c8c2]">
+        {{ error }}
+      </p>
 
       <template v-else-if="meta">
-        <div class="flex flex-col gap-4 sm:flex-row">
+        <div class="flex items-start gap-3">
           <img
             v-if="meta.thumbnail && !coverBroken"
             :src="meta.thumbnail"
             :alt="meta.title"
-            class="aspect-video w-full rounded-lg object-cover sm:w-40"
+            class="aspect-video w-20 shrink-0 rounded-[12px] border border-white/12 object-cover sm:w-32"
             @error="coverBroken = true"
           />
-          <div class="min-w-0">
-            <p class="text-xs text-stone">{{ meta.platform }}</p>
-            <h2 class="mt-1 break-words text-xl font-bold leading-snug text-ink">{{ meta.title }}</h2>
-            <p v-if="duration" class="mt-1 text-sm text-stone">{{ duration }}</p>
+          <div class="min-w-0 flex-1">
+            <p class="text-[11px] leading-4 text-cream/50">
+              {{ meta.platform }}<span v-if="duration"> · {{ duration }}</span>
+            </p>
+            <h2 class="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-cream sm:text-base">
+              {{ meta.title }}
+            </h2>
+
+            <div class="mt-2 flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="清晰度">
+              <button
+                v-for="item in meta.formats"
+                :key="item.format_id"
+                type="button"
+                role="radio"
+                class="inline-flex min-h-8 cursor-pointer items-center rounded-full border px-2.5 text-xs transition-all duration-150"
+                :class="item.format_id === selectedId ? 'border-copper bg-copper/15 font-medium text-white shadow-[0_0_0_1px_rgba(79,109,168,0.4)]' : 'border-white/10 bg-white/[0.04] text-cream/80 hover:border-copper/60 hover:bg-white/[0.08] hover:text-cream'"
+                :aria-checked="item.format_id === selectedId"
+                :disabled="phase === 'saving'"
+                @click="emit('select', item.format_id)"
+              >
+                {{ item.label }}
+                <span class="ml-1 text-cream/45">{{ formatBytes(item.filesize) }}</span>
+              </button>
+
+              <a
+                v-if="phase === 'done' && job"
+                ref="link"
+                :href="fileHref"
+                class="mt-0 inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-full border border-white/20 bg-copper px-4 text-xs font-medium text-cream shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_24px_-12px_rgba(63,90,140,0.7)] transition-all duration-150 hover:-translate-y-px hover:bg-copper-deep hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_12px_26px_-12px_rgba(63,90,140,0.8)] active:translate-y-0 active:scale-[0.98] sm:ml-auto sm:min-h-8 sm:w-auto"
+                @click="onAgain"
+              >
+                再次下载
+              </a>
+              <button
+                v-else
+                type="button"
+                class="mt-0 inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-full border border-white/20 bg-copper px-4 text-xs font-medium text-cream shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_24px_-12px_rgba(63,90,140,0.7)] transition-all duration-150 hover:-translate-y-px hover:bg-copper-deep hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_12px_26px_-12px_rgba(63,90,140,0.8)] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto sm:min-h-8 sm:w-auto"
+                :disabled="phase === 'saving' || !selectedId"
+                @click="emit('save')"
+              >
+                {{ phase === 'saving' ? '正在保存' : phase === 'failed' ? '重试' : '保存到本地' }}
+              </button>
+            </div>
           </div>
         </div>
 
-        <p v-if="meta.hint" class="mt-4 text-sm text-stone">{{ meta.hint }}</p>
+        <p v-if="meta.hint" class="mt-2 line-clamp-1 text-xs text-cream/45">{{ meta.hint }}</p>
 
-        <div class="mt-4 flex flex-wrap gap-2" role="radiogroup" aria-label="清晰度">
-          <button
-            v-for="item in meta.formats"
-            :key="item.format_id"
-            type="button"
-            role="radio"
-            class="min-h-11 cursor-pointer rounded-full border px-4 text-sm transition"
-            :class="item.format_id === selectedId ? 'border-copper bg-white font-medium text-copper-deep' : 'border-line bg-cream text-ink hover:border-copper'"
-            :aria-checked="item.format_id === selectedId"
-            :disabled="phase === 'saving'"
-            @click="emit('select', item.format_id)"
-          >
-            {{ item.label }}
-            <span class="text-stone"> · {{ formatBytes(item.filesize) }}</span>
-          </button>
-        </div>
-
-        <div v-if="phase === 'saving'" class="mt-4">
+        <div v-if="phase === 'saving'" class="mt-2 flex items-center gap-2">
           <div
-            class="h-2 overflow-hidden rounded-full bg-line"
+            class="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10"
             role="progressbar"
             :aria-valuenow="percent"
             aria-valuemin="0"
             aria-valuemax="100"
             :aria-label="savingLabel"
           >
-            <div class="h-full bg-copper transition-all" :style="{ width: `${Math.max(percent, 8)}%` }"></div>
+            <div class="h-full bg-copper transition-all duration-200" :style="{ width: `${Math.max(percent, 8)}%` }"></div>
           </div>
-          <p class="mt-2 text-sm text-stone">{{ savingLabel }}</p>
+          <span class="shrink-0 text-xs tabular-nums text-cream/55">{{ savingLabel }}</span>
         </div>
 
-        <p v-if="phase === 'failed' && error" class="mt-4 text-sm text-ink">{{ error }}</p>
-        <p v-else-if="phase === 'done'" class="mt-4 text-sm text-stone">文件已交给浏览器。再存一份可以点「再次下载」。</p>
-
-        <div class="mt-4">
-          <a
-            v-if="phase === 'done' && job"
-            ref="link"
-            :href="fileHref"
-            class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full bg-ink px-5 text-sm font-medium text-cream transition hover:bg-copper-deep"
-            @click="onAgain"
-          >
-            再次下载
-          </a>
-          <button
-            v-else
-            type="button"
-            class="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-full bg-ink px-5 text-sm font-medium text-cream transition hover:bg-copper-deep disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="phase === 'saving' || !selectedId"
-            @click="emit('save')"
-          >
-            {{ phase === 'saving' ? '正在保存' : phase === 'failed' ? '重试' : '保存到本地' }}
-          </button>
-        </div>
+        <p v-if="phase === 'failed' && error" class="mt-2 text-xs text-[#f3c8c2]">{{ error }}</p>
+        <p v-else-if="phase === 'done'" class="mt-2 text-xs text-cream/55">文件已交给浏览器，需要时可点「再次下载」。</p>
       </template>
     </article>
   </section>

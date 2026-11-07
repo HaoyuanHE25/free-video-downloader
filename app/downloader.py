@@ -140,7 +140,7 @@ def download_media(url: str, format_id: str, directory: Path, on_progress) -> tu
             "max_filesize": MAX_FILE_BYTES,
             "progress_hooks": [hook],
             "overwrites": True,
-            "fragment_retries": 1,
+            "fragment_retries": 5,
         },
         page_url=url,
     )
@@ -309,7 +309,7 @@ def _base_opts(extra: dict | None = None, page_url: str | None = None) -> dict:
         "no_warnings": True,
         "noprogress": True,
         "socket_timeout": 30,
-        "retries": 1,
+        "retries": 5,
         "restrictfilenames": True,
         "windowsfilenames": True,
     }
