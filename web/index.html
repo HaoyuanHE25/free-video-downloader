@@ -48,6 +48,12 @@
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Any",
       "inLanguage": "zh-CN",
+      "isAccessibleForFree": true,
+      "browserRequirements": "需要支持 ES2020 的现代浏览器",
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "需要保存或快速理解视频内容的学习者、创作者与知识工作者"
+      },
       "offers": {
         "@type": "Offer",
         "price": "0",
@@ -62,6 +68,80 @@
       ]
     }
     </script>
+
+    <!-- 结构化数据：常见问答 -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "随下是什么？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "随下（万能视频下载总结器）是一个自托管的网页工具：粘贴一条公开视频链接，就能下载原视频、生成 AI 总结、导出字幕、绘制思维导图并继续追问。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "需要注册或付费吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "不需要。产品没有账号体系和支付模块，打开网页粘贴链接即可使用，所有使用者共用同一套限额。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "支持哪些平台？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "明确支持 Bilibili、YouTube、抖音三个平台。其它平台通过 yt-dlp 尝试解析，能否成功取决于上游支持的进度。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "视频没有字幕能总结吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "不能。产品只读取平台已有的公开字幕，不做语音转写。视频没有字幕轨时，总结和问答都无法进行，页面会直接说明原因。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "能下载付费或私密视频吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "不能。只处理公开链接，不支持付费内容、私密视频、需要登录才能观看的内容，也不接收平台 Cookie 或账号密码。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "能导出什么格式的字幕？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "四种：纯文本 TXT、带时间戳的 TXT、标准 SRT、Web 播放器用的 VTT。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "思维导图能导出吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "能。支持 PNG（2x 或 3x，白底）和 SVG（矢量，适合打印和二次编辑），普通视图和全屏都能导出。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "能批量下载或翻译字幕吗？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "都不能。产品专注单条链接的下载与理解，批量下载和字幕翻译不在当前范围内。"
+          }
+        }
+      ]
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -71,6 +151,60 @@
   </head>
   <body>
     <div id="app"></div>
+    <noscript>
+      <h1>随下（万能视频下载总结器）：在线视频下载与 AI 总结</h1>
+      <p>
+        随下是一个自托管的网页工具。粘贴一条公开视频链接，就能下载原视频、生成 AI
+        总结、导出字幕、绘制思维导图，并基于视频内容继续追问。无需注册，全程不接收平台
+        Cookie，文件只保存在你自己的设备上。
+      </p>
+
+      <h2>核心功能</h2>
+      <ul>
+        <li>解析公开视频链接，收拢为最多四档清晰度：最佳 1080p、最佳 720p、最佳 480p、仅音频。</li>
+        <li>异步下载并显示进度，完成后由浏览器保存到本地，卡片上可再次下载。</li>
+        <li>基于公开字幕生成中文大纲、要点和带时间点的章节，支持 Markdown 排版与复制。</li>
+        <li>字幕提取与导出，支持纯文本 TXT、时间戳 TXT、标准 SRT、Web 播放器 VTT 四种格式。</li>
+        <li>把视频结构画成思维导图，普通视图与全屏都可查看，支持导出 2x/3x PNG 与矢量 SVG。</li>
+        <li>基于字幕或粘贴资料做多轮问答，回答引用字幕时带时间点。</li>
+        <li>下载、总结、字幕、导图、问答共用同一条链接，切换标签不丢失已有结果。</li>
+      </ul>
+
+      <h2>支持平台</h2>
+      <p>Bilibili、YouTube、抖音。其它平台通过 yt-dlp 尝试解析，成功率取决于上游支持进度。</p>
+
+      <h2>使用场景</h2>
+      <ul>
+        <li>网课与公开课：先看总结决定是否完整观看，再导出字幕做笔记。</li>
+        <li>长视频速览：把两小时的访谈压成大纲与章节，只看关键片段。</li>
+        <li>内容整理：把视频结构导出成导图，放进汇报或文档。</li>
+        <li>字幕复用：导出 SRT 给剪辑软件，或导出纯文本做文字稿。</li>
+      </ul>
+
+      <h2>使用边界</h2>
+      <ul>
+        <li>只支持公开链接，不支持付费内容、私密视频或需要登录才能观看的内容。</li>
+        <li>没有语音转写（ASR）。视频本身没有字幕轨时，总结与问答无法进行。</li>
+        <li>不支持批量链接、播放列表整表下载，也不支持字幕翻译。</li>
+        <li>没有账号体系与付费，所有使用者共用同一套限额。</li>
+        <li>单文件约 500MB，单次约 10 分钟，同时最多 2 个下载。</li>
+        <li>不接收平台 Cookie、用户名或密码。</li>
+      </ul>
+
+      <h2>常见问题</h2>
+      <dl>
+        <dt>视频没有字幕能总结吗？</dt>
+        <dd>不能。产品只读取平台已有的公开字幕，不做语音转写。</dd>
+        <dt>需要注册或付费吗？</dt>
+        <dd>不需要。没有账号体系和支付模块，打开网页即可使用。</dd>
+        <dt>下载的文件保存在哪里？</dt>
+        <dd>保存在你自己的设备上。服务端只在下载过程中临时中转，文件交付后即删除。</dd>
+        <dt>能导出什么格式的字幕？</dt>
+        <dd>TXT、时间戳 TXT、SRT、VTT 四种。</dd>
+      </dl>
+
+      <p>本页需要启用 JavaScript 才能使用完整功能。</p>
+    </noscript>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
