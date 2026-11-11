@@ -1,5 +1,7 @@
+import { i18n } from './i18n/index.js'
+
 export function formatBytes(value) {
-  if (!value) return '大小未知'
+  if (!value) return i18n.global.t('result.unknownSize')
   if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`
   const mb = value / (1024 * 1024)
   return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB`

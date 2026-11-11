@@ -66,12 +66,14 @@ def _public_dns(host, *args, **kwargs):
 
 
 @pytest.fixture
-def client(monkeypatch):
+def client(monkeypatch, tmp_path):
     FakeYDL.created = []
     FakeYDL.urls = []
-    monkeypatch.setattr(downloader, "YoutubeDL", FakeYDL)
+    monkeypatch.setattr(downloader, "Engine", FakeYDL)
     monkeypatch.setattr(downloader, "ffmpeg_available", lambda: True)
     monkeypatch.setattr(downloader.socket, "getaddrinfo", _public_dns)
+    # 每日额度会落库，测试必须指向临时库，不能污染 data/app.sqlite3
+    monkeypatch.setenv("MEMBERSHIP_DB_PATH", str(tmp_path / "membership.sqlite3"))
     store.reset()
     with TestClient(app) as test_client:
         yield test_client

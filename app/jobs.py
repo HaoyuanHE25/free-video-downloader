@@ -11,12 +11,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.downloader import UserFacingError, download_media
+from app.membership import FREE_LIMITS, MEMBER_LIMITS, Limits
 
 MAX_CONCURRENT = 2
 MAX_PENDING = 8
 JOB_TTL_SECONDS = 30 * 60
 
-_slots = threading.BoundedSemaphore(MAX_CONCURRENT)
+# 游客与会员各用各的并发名额，互不挤占。
+_slots = {
+    FREE_LIMITS.tier: threading.BoundedSemaphore(FREE_LIMITS.max_concurrent),
+    MEMBER_LIMITS.tier: threading.BoundedSemaphore(MEMBER_LIMITS.max_concurrent),
+}
 
 
 @dataclass
@@ -29,6 +34,7 @@ class Job:
     path: Path | None
     directory: Path
     created_at: float
+    limits: Limits = FREE_LIMITS
 
 
 class JobStore:
@@ -38,7 +44,8 @@ class JobStore:
         self._root = Path(tempfile.gettempdir()) / "suixia"
         self._root.mkdir(parents=True, exist_ok=True)
 
-    def submit(self, url: str, format_id: str) -> str:
+    def submit(self, url: str, format_id: str, *, limits: Limits | None = None) -> str:
+        limits = limits or FREE_LIMITS
         with self._lock:
             self._sweep_locked()
             pending = sum(1 for job in self._jobs.values() if job.status in {"queued", "downloading"})
@@ -53,6 +60,7 @@ class JobStore:
                 path=None,
                 directory=Path(tempfile.mkdtemp(prefix="job-", dir=self._root)),
                 created_at=time.monotonic(),
+                limits=limits,
             )
             self._jobs[job.id] = job
         threading.Thread(
@@ -90,7 +98,7 @@ class JobStore:
             shutil.rmtree(directory, ignore_errors=True)
 
     def _run(self, job: Job, url: str, format_id: str) -> None:
-        with _slots:
+        with _slots[job.limits.tier]:
             with self._lock:
                 if job.id not in self._jobs:
                     return
@@ -102,7 +110,14 @@ class JobStore:
                         job.progress = value
 
             try:
-                path, filename = download_media(url, format_id, job.directory, on_progress)
+                path, filename = download_media(
+                    url,
+                    format_id,
+                    job.directory,
+                    on_progress,
+                    max_bytes=job.limits.max_file_bytes,
+                    timeout_seconds=job.limits.timeout_seconds,
+                )
             except UserFacingError as exc:
                 self._fail(job, exc.message)
                 return

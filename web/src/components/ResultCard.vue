@@ -1,7 +1,11 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { fileUrl } from '../api.js'
 import { formatBytes, formatDuration } from '../format.js'
+import { renderMessage } from '../i18n/messages.js'
+
+const { t } = useI18n()
 
 const props = defineProps({
   parsing: { type: Boolean, default: false },
@@ -21,9 +25,9 @@ const percent = computed(() => Math.round((((props.job && props.job.progress) ||
 const fileHref = computed(() => (props.job ? fileUrl(props.job.id) : '#'))
 const duration = computed(() => formatDuration(props.meta && props.meta.duration))
 const savingLabel = computed(() => {
-  if (props.job && props.job.status === 'queued') return '排队中'
-  if (!props.job || !props.job.progress) return '正在保存'
-  return `正在保存 ${percent.value}%`
+  if (props.job && props.job.status === 'queued') return t('result.queued')
+  if (!props.job || !props.job.progress) return t('result.saving')
+  return t('result.savingPercent', { percent: percent.value })
 })
 
 watch(
@@ -55,10 +59,10 @@ function onAgain(event) {
 <template>
   <section class="mx-auto mt-2 w-full" aria-live="polite">
     <article class="ink-band rounded-[18px] p-4 sm:p-5">
-      <p v-if="parsing" class="text-sm text-cream/55">正在读取标题和清晰度…</p>
+      <p v-if="parsing" class="text-sm text-cream/55">{{ t('result.loading') }}</p>
 
       <p v-else-if="error && !meta" class="rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm text-[#f3c8c2]">
-        {{ error }}
+        {{ renderMessage(error) }}
       </p>
 
       <template v-else-if="meta">
@@ -72,13 +76,13 @@ function onAgain(event) {
           />
           <div class="min-w-0 flex-1">
             <p class="text-[11px] leading-4 text-cream/50">
-              {{ meta.platform }}<span v-if="duration"> · {{ duration }}</span>
+              {{ renderMessage(meta.platform) }}<span v-if="duration"> · {{ duration }}</span>
             </p>
             <h2 class="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-cream sm:text-base">
               {{ meta.title }}
             </h2>
 
-            <div class="mt-2 flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="清晰度">
+            <div class="mt-2 flex flex-wrap items-center gap-1.5" role="radiogroup" :aria-label="t('result.qualityLabel')">
               <button
                 v-for="item in meta.formats"
                 :key="item.format_id"
@@ -90,7 +94,7 @@ function onAgain(event) {
                 :disabled="phase === 'saving'"
                 @click="emit('select', item.format_id)"
               >
-                {{ item.label }}
+                {{ renderMessage(item.label) }}
                 <span class="ml-1 text-cream/45">{{ formatBytes(item.filesize) }}</span>
               </button>
 
@@ -101,7 +105,7 @@ function onAgain(event) {
                 class="mt-0 inline-flex min-h-9 w-full shrink-0 items-center justify-center rounded-full border border-white/20 bg-copper px-4 text-xs font-medium text-cream shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_24px_-12px_rgba(63,90,140,0.7)] transition-all duration-150 hover:-translate-y-px hover:bg-copper-deep hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_12px_26px_-12px_rgba(63,90,140,0.8)] active:translate-y-0 active:scale-[0.98] sm:ml-auto sm:min-h-8 sm:w-auto"
                 @click="onAgain"
               >
-                再次下载
+                {{ t('result.downloadAgain') }}
               </a>
               <button
                 v-else
@@ -110,13 +114,13 @@ function onAgain(event) {
                 :disabled="phase === 'saving' || !selectedId"
                 @click="emit('save')"
               >
-                {{ phase === 'saving' ? '正在保存' : phase === 'failed' ? '重试' : '保存到本地' }}
+                {{ phase === 'saving' ? t('result.saving') : phase === 'failed' ? t('result.retry') : t('result.save') }}
               </button>
             </div>
           </div>
         </div>
 
-        <p v-if="meta.hint" class="mt-2 line-clamp-1 text-xs text-cream/45">{{ meta.hint }}</p>
+        <p v-if="meta.hint" class="mt-2 line-clamp-1 text-xs text-cream/45">{{ renderMessage(meta.hint) }}</p>
 
         <div v-if="phase === 'saving'" class="mt-2 flex items-center gap-2">
           <div
@@ -132,8 +136,8 @@ function onAgain(event) {
           <span class="shrink-0 text-xs tabular-nums text-cream/55">{{ savingLabel }}</span>
         </div>
 
-        <p v-if="phase === 'failed' && error" class="mt-2 text-xs text-[#f3c8c2]">{{ error }}</p>
-        <p v-else-if="phase === 'done'" class="mt-2 text-xs text-cream/55">文件已交给浏览器，需要时可点「再次下载」。</p>
+        <p v-if="phase === 'failed' && error" class="mt-2 text-xs text-[#f3c8c2]">{{ renderMessage(error) }}</p>
+        <p v-else-if="phase === 'done'" class="mt-2 text-xs text-cream/55">{{ t('result.doneNote') }}</p>
       </template>
     </article>
   </section>

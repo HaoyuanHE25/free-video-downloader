@@ -1,29 +1,34 @@
 <script setup>
-const features = [
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
+const features = computed(() => [
   {
-    title: '多平台',
-    body: '公开页面能打开的链接，交给 yt-dlp 识别。不登录，也不接收平台 Cookie。',
+    title: t('feature.platformsTitle'),
+    body: t('feature.platformsBody'),
     icon: 'platforms',
   },
   {
-    title: '自选清晰度',
-    body: '收成 1080p、720p、480p 和仅音频。默认选中不超过 1080p 的最佳一档。',
+    title: t('feature.qualityTitle'),
+    body: t('feature.qualityBody'),
     icon: 'quality',
   },
   {
-    title: '手机可用',
-    body: '手机浏览器里同样能把文件保存到本地，不必先装桌面软件。',
+    title: t('feature.phoneTitle'),
+    body: t('feature.phoneBody'),
     icon: 'phone',
   },
-]
+])
 </script>
 
 <template>
   <section id="capabilities" class="mx-auto mt-12 w-full max-w-[1080px] scroll-mt-20">
     <div class="flex items-center gap-3">
-      <h2 class="shrink-0 text-[13px] font-semibold tracking-[0.04em] text-ink">能做什么</h2>
+      <h2 class="shrink-0 text-[13px] font-semibold tracking-[0.04em] text-ink">{{ t('feature.heading') }}</h2>
       <span class="h-px flex-1 bg-line"></span>
-      <p class="hidden shrink-0 text-[11px] text-stone-light sm:inline">不登录、不接收 Cookie，只处理公开页面</p>
+      <p class="hidden shrink-0 text-[11px] text-stone-light sm:inline">{{ t('feature.note') }}</p>
     </div>
     <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
       <article

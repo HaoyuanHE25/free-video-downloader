@@ -15,6 +15,7 @@ from app.downloader import (
     MAX_FILE_BYTES,
     UserFacingError,
     safe_filename,
+    size_label,
     validate_public_url,
 )
 
@@ -67,20 +68,38 @@ def extract(url: str) -> dict:
     }
 
 
-def download(url: str, format_id: str, directory: Path, on_progress) -> tuple[Path, str]:
+def download(
+    url: str,
+    format_id: str,
+    directory: Path,
+    on_progress,
+    *,
+    max_bytes: int | None = None,
+    timeout_seconds: float | None = None,
+) -> tuple[Path, str]:
+    limit_bytes = MAX_FILE_BYTES if max_bytes is None else max_bytes
+    limit_seconds = DOWNLOAD_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
     directory.mkdir(parents=True, exist_ok=True)
     info = extract(url)
     chosen = next((item for item in info["formats"] if item["format_id"] == format_id), None)
     if chosen is None:
         raise UserFacingError("清晰度选项无效")
     expected = chosen.get("filesize") or 0
-    if expected > MAX_FILE_BYTES:
-        raise UserFacingError("文件超过约 500MB，请换较低清晰度")
+    if expected > limit_bytes:
+        raise UserFacingError(f"文件超过约 {size_label(limit_bytes)}，请换较低清晰度")
     started = time.monotonic()
     last_error = UserFacingError("下载没有完成，请重试")
     for media in chosen.get("urls") or []:
         try:
-            path = _save(media, directory / "media.mp4", on_progress, started, expected)
+            path = _save(
+                media,
+                directory / "media.mp4",
+                on_progress,
+                started,
+                expected,
+                limit_bytes=limit_bytes,
+                limit_seconds=limit_seconds,
+            )
             return path, safe_filename(info["title"], "mp4")
         except UserFacingError as exc:
             last_error = exc
@@ -214,14 +233,23 @@ def _thumbnail(video: dict) -> str | None:
     return None
 
 
-def _save(url: str, dest: Path, on_progress, started: float, expected: int) -> Path:
+def _save(
+    url: str,
+    dest: Path,
+    on_progress,
+    started: float,
+    expected: int,
+    *,
+    limit_bytes: int = MAX_FILE_BYTES,
+    limit_seconds: float = DOWNLOAD_TIMEOUT_SECONDS,
+) -> Path:
     headers = {"User-Agent": _UA, "Referer": _REFERER}
     current = validate_public_url(url)
     if not _under_hosts(current, _MEDIA_HOSTS):
         raise UserFacingError("下载没有完成，请重试")
     with httpx.Client(timeout=30.0, follow_redirects=False) as client:
         for _ in range(4):
-            _check_time(started)
+            _check_time(started, limit_seconds)
             with client.stream("GET", current, headers=headers) as response:
                 if response.status_code in {301, 302, 303, 307, 308}:
                     location = response.headers.get("location")
@@ -237,17 +265,17 @@ def _save(url: str, dest: Path, on_progress, started: float, expected: int) -> P
                 if media_type and not (media_type.startswith("video/") or media_type == "application/octet-stream"):
                     raise UserFacingError("下载没有完成，请重试")
                 total = _content_length(response.headers.get("content-length")) or expected
-                if total > MAX_FILE_BYTES:
-                    raise UserFacingError("文件超过约 500MB，请换较低清晰度")
+                if total > limit_bytes:
+                    raise UserFacingError(f"文件超过约 {size_label(limit_bytes)}，请换较低清晰度")
                 received = 0
                 with dest.open("wb") as handle:
                     for chunk in response.iter_bytes(256 * 1024):
-                        _check_time(started)
+                        _check_time(started, limit_seconds)
                         if not chunk:
                             continue
                         received += len(chunk)
-                        if received > MAX_FILE_BYTES:
-                            raise UserFacingError("文件超过约 500MB，请换较低清晰度")
+                        if received > limit_bytes:
+                            raise UserFacingError(f"文件超过约 {size_label(limit_bytes)}，请换较低清晰度")
                         handle.write(chunk)
                         if total:
                             on_progress(min(received / total, 0.99))
@@ -266,8 +294,8 @@ def _content_length(value: str | None) -> int:
         return 0
 
 
-def _check_time(started: float) -> None:
-    if time.monotonic() - started > DOWNLOAD_TIMEOUT_SECONDS:
+def _check_time(started: float, limit_seconds: float = DOWNLOAD_TIMEOUT_SECONDS) -> None:
+    if time.monotonic() - started > limit_seconds:
         raise UserFacingError("下载超时，请换一条较短的公开视频")
 
 

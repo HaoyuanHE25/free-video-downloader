@@ -1,10 +1,14 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { renderMessage, stageMessage } from '../i18n/messages.js'
 import { streamSubtitles } from '../summaryApi.js'
 
 const props = defineProps({
   url: { type: String, default: '' },
 })
+
+const { t } = useI18n()
 
 const busy = ref(false)
 const status = ref('')
@@ -19,12 +23,12 @@ let attempt = 0
 
 const ready = computed(() => Boolean(props.url.trim()))
 
-const formats = [
-  { key: 'plain', label: 'TXT', ext: 'txt', type: 'text/plain;charset=utf-8' },
-  { key: 'timed', label: '时间戳 TXT', ext: 'txt', type: 'text/plain;charset=utf-8' },
-  { key: 'srt', label: 'SRT', ext: 'srt', type: 'application/x-subrip;charset=utf-8' },
-  { key: 'vtt', label: 'VTT', ext: 'vtt', type: 'text/vtt;charset=utf-8' },
-]
+const formats = computed(() => [
+  { key: 'plain', label: t('subtitle.formatPlain'), ext: 'txt', type: 'text/plain;charset=utf-8' },
+  { key: 'timed', label: t('subtitle.formatTimed'), ext: 'txt', type: 'text/plain;charset=utf-8' },
+  { key: 'srt', label: t('subtitle.formatSrt'), ext: 'srt', type: 'application/x-subrip;charset=utf-8' },
+  { key: 'vtt', label: t('subtitle.formatVtt'), ext: 'vtt', type: 'text/vtt;charset=utf-8' },
+])
 
 onUnmounted(() => controller?.abort())
 
@@ -47,7 +51,7 @@ function downloadFormat(item) {
   const url = URL.createObjectURL(new Blob([content], { type: item.type }))
   const link = document.createElement('a')
   link.href = url
-  link.download = `字幕-${fileStamp()}.${item.ext}`
+  link.download = `${t('subtitle.filePrefix')}-${fileStamp()}.${item.ext}`
   document.body.appendChild(link)
   link.click()
   link.remove()
@@ -62,7 +66,7 @@ async function onProcess() {
   if (busy.value) return
   const target = props.url.trim()
   if (!target) {
-    error.value = '请先在上方粘贴视频链接'
+    error.value = 'error.needUrl'
     return
   }
   controller?.abort()
@@ -73,7 +77,7 @@ async function onProcess() {
   exports.value = null
   copied.value = ''
   error.value = ''
-  status.value = '正在解析字幕'
+  status.value = 'stage.processing'
   busy.value = true
   try {
     await streamSubtitles(
@@ -81,7 +85,7 @@ async function onProcess() {
       (block) => {
         const data = block.data || {}
         if (block.event === 'status') {
-          status.value = data.message || ''
+          status.value = stageMessage(data.stage, data.message)
         } else if (block.event === 'stats') {
           stats.value = data
         } else if (block.event === 'segment') {
@@ -92,7 +96,7 @@ async function onProcess() {
           segments.value = result.segments || segments.value
           exports.value = result.exports || null
         } else if (block.event === 'error') {
-          throw new Error(data.message || '字幕处理失败，请重试')
+          throw new Error(data.message || 'error.subtitleFailed')
         }
       },
       controller.signal,
@@ -101,7 +105,7 @@ async function onProcess() {
   } catch (err) {
     if (current !== attempt) return
     if (err.name === 'AbortError') return
-    error.value = err.message || '字幕处理失败，请重试'
+    error.value = err.message || 'error.subtitleFailed'
   } finally {
     if (current === attempt) {
       busy.value = false
@@ -117,7 +121,7 @@ async function copyFormat(key) {
     copied.value = key
   } catch {
     copied.value = ''
-    error.value = '复制没有完成，请重试'
+    error.value = 'common.copyFailed'
   }
 }
 </script>
@@ -127,41 +131,43 @@ async function copyFormat(key) {
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="flex items-center gap-2 text-xs text-stone">
         <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="busy ? 'animate-pulse bg-copper' : 'bg-copper/60'"></span>
-        {{ busy ? status || '正在处理' : stats ? '字幕解析完成' : '抓取字幕，自动清洗、断句与分段' }}
+        {{ busy ? renderMessage(status) || t('subtitle.busy') : stats ? t('subtitle.done') : t('subtitle.idle') }}
       </p>
-      <span v-if="stats" class="text-xs tabular-nums text-stone">共 {{ segments.length }} 段</span>
+      <span v-if="stats" class="text-xs tabular-nums text-stone">{{ t('subtitle.count', { count: segments.length }) }}</span>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
       <button type="button" class="btn-primary" :disabled="busy || !ready" @click="onProcess">
-        {{ busy ? '正在解析' : '解析字幕' }}
+        {{ busy ? t('subtitle.actionBusy') : t('subtitle.action') }}
       </button>
     </div>
 
-    <p v-if="!ready && !busy" class="mt-3 text-xs text-stone">先在上方粘贴视频链接，再点击解析字幕。</p>
+    <p v-if="!ready && !busy" class="mt-3 text-xs text-stone">{{ t('subtitle.emptyReady') }}</p>
 
     <p v-if="error" class="mt-3 rounded-xl border border-white/70 bg-white/50 px-3.5 py-2.5 text-sm text-copper-deep">
-      {{ error }}
+      {{ renderMessage(error) }}
     </p>
 
     <div v-if="stats" class="mt-4 flex flex-wrap gap-2">
-      <span class="stat-pill">{{ stats.cues }} 条字幕</span>
-      <span class="stat-pill">{{ stats.segments }} 个分段</span>
-      <span class="stat-pill">{{ stats.sentences }} 句</span>
-      <span class="stat-pill">{{ stats.characters }} 字</span>
-      <span v-if="stats.duration" class="stat-pill tabular-nums">时长 {{ clock(stats.duration) }}</span>
+      <span class="stat-pill">{{ t('subtitle.statCues', { count: stats.cues }) }}</span>
+      <span class="stat-pill">{{ t('subtitle.statSegments', { count: stats.segments }) }}</span>
+      <span class="stat-pill">{{ t('subtitle.statSentences', { count: stats.sentences }) }}</span>
+      <span class="stat-pill">{{ t('subtitle.statChars', { count: stats.characters }) }}</span>
+      <span v-if="stats.duration" class="stat-pill tabular-nums">{{ t('subtitle.statDuration', { time: clock(stats.duration) }) }}</span>
     </div>
 
-    <p v-if="stats && stats.truncated" class="mt-2 text-sm text-stone">字幕较长，只处理了前一部分。</p>
+    <p v-if="stats && stats.truncated" class="mt-2 text-sm text-stone">{{ t('subtitle.truncated') }}</p>
 
     <div v-if="segments.length" class="mt-6">
       <div class="flex items-center justify-between gap-2 border-t border-line pt-4">
-        <h3 class="result-title">语义分段</h3>
-        <span class="text-xs tabular-nums text-stone">共 {{ segments.length }} 段</span>
+        <h3 class="result-title">{{ t('subtitle.section') }}</h3>
+        <span class="text-xs tabular-nums text-stone">{{ t('subtitle.count', { count: segments.length }) }}</span>
       </div>
       <ol class="surface-inset mt-3 max-h-96 divide-y divide-line overflow-auto">
         <li v-for="item in segments" :key="item.index" class="px-3.5 py-3">
-          <p class="text-xs tabular-nums text-stone">第 {{ item.index + 1 }} 段 · {{ clock(item.start) }} – {{ clock(item.end) }}</p>
+          <p class="text-xs tabular-nums text-stone">
+            {{ t('subtitle.segmentMeta', { index: item.index + 1, start: clock(item.start), end: clock(item.end) }) }}
+          </p>
           <p class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-ink">{{ item.text }}</p>
         </li>
       </ol>
@@ -169,7 +175,7 @@ async function copyFormat(key) {
 
     <div v-if="exports" class="mt-4 space-y-2.5 border-t border-line pt-4">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-stone">下载</span>
+        <span class="text-xs text-stone">{{ t('subtitle.download') }}</span>
         <button
           v-for="item in formats"
           :key="`download-${item.key}`"
@@ -177,11 +183,11 @@ async function copyFormat(key) {
           class="chip"
           @click="downloadFormat(item)"
         >
-          {{ downloaded === item.key ? '已开始下载' : `${item.label} 文件` }}
+          {{ downloaded === item.key ? t('subtitle.downloaded') : t('subtitle.downloadFile', { label: item.label }) }}
         </button>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-stone">复制</span>
+        <span class="text-xs text-stone">{{ t('subtitle.copy') }}</span>
         <button
           v-for="item in formats"
           :key="`copy-${item.key}`"
@@ -189,13 +195,13 @@ async function copyFormat(key) {
           class="btn-quiet"
           @click="copyFormat(item.key)"
         >
-          {{ copied === item.key ? '已复制' : `复制 ${item.label}` }}
+          {{ copied === item.key ? t('subtitle.copied') : t('subtitle.copyFormat', { label: item.label }) }}
         </button>
       </div>
     </div>
 
     <div v-if="!busy && !stats && !error" class="empty-state mt-4">
-      点击解析字幕，统计与语义分段会显示在这里
+      {{ t('subtitle.empty') }}
     </div>
   </article>
 </template>

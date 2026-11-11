@@ -1,11 +1,15 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { renderMessage, stageMessage } from '../i18n/messages.js'
 import { streamSummary } from '../summaryApi.js'
 import MarkdownView from './MarkdownView.vue'
 
 const props = defineProps({
   url: { type: String, default: '' },
 })
+
+const { t } = useI18n()
 
 const phase = ref('idle')
 const status = ref('')
@@ -52,7 +56,7 @@ function onEvent(block) {
       summarizing: 'summarizing',
       building_mindmap: 'building',
     }[data.stage] || phase.value
-    status.value = data.message || ''
+    status.value = stageMessage(data.stage, data.message)
     return
   }
   if (block.event === 'delta') {
@@ -85,7 +89,7 @@ function onEvent(block) {
     return
   }
   if (block.event === 'error') {
-    throw new Error(data.message || '总结没有生成，请重试')
+    throw new Error(data.message || 'error.summaryFailed')
   }
 }
 
@@ -93,7 +97,7 @@ async function onSummarize() {
   if (busy.value) return
   const target = props.url.trim()
   if (!target) {
-    error.value = '请先在上方粘贴视频链接'
+    error.value = 'error.needUrl'
     return
   }
   controller?.abort()
@@ -101,11 +105,11 @@ async function onSummarize() {
   const current = ++attempt
   reset()
   phase.value = 'fetching'
-  status.value = '正在连接总结服务'
+  status.value = 'stage.connecting'
   try {
     await streamSummary(target, onEvent, controller.signal)
     if (current !== attempt) return
-    if (phase.value !== 'done') throw new Error('总结中断，请重试')
+    if (phase.value !== 'done') throw new Error('error.summaryInterrupted')
   } catch (err) {
     if (current !== attempt) return
     if (err.name === 'AbortError') {
@@ -117,7 +121,7 @@ async function onSummarize() {
     }
     phase.value = 'failed'
     status.value = ''
-    error.value = err.message || '总结没有生成，请重试'
+    error.value = err.message || 'error.summaryFailed'
   } finally {
     if (current === attempt) controller = null
   }
@@ -140,7 +144,7 @@ async function onCopy() {
     copied.value = true
   } catch {
     copied.value = false
-    error.value = '复制没有完成，请重试'
+    error.value = 'common.copyFailed'
   }
 }
 </script>
@@ -150,23 +154,23 @@ async function onCopy() {
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="flex items-center gap-2 text-xs text-stone">
         <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="busy ? 'animate-pulse bg-copper' : 'bg-copper/60'"></span>
-        {{ busy ? status || '正在处理' : phase === 'done' ? '总结已完成' : '根据链接生成大纲、要点与章节' }}
+        {{ busy ? renderMessage(status) || t('summary.busy') : phase === 'done' ? t('summary.done') : t('summary.idle') }}
       </p>
       <button v-if="hasContent" type="button" class="btn-quiet" @click="onCopy">
-        {{ copied ? '已复制' : '复制总结' }}
+        {{ copied ? t('summary.copied') : t('summary.copy') }}
       </button>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
       <button type="button" class="btn-primary" :disabled="busy || !ready" @click="onSummarize">
-        {{ busy ? '正在总结' : phase === 'done' ? '重新总结' : '生成总结' }}
+        {{ busy ? t('summary.actionBusy') : phase === 'done' ? t('summary.actionAgain') : t('summary.action') }}
       </button>
     </div>
 
-    <p v-if="!ready && !busy" class="mt-3 text-xs text-stone">先在上方粘贴视频链接，再点击生成总结。</p>
+    <p v-if="!ready && !busy" class="mt-3 text-xs text-stone">{{ t('summary.emptyReady') }}</p>
 
     <p v-if="error" class="mt-3 rounded-xl border border-white/70 bg-white/50 px-3.5 py-2.5 text-sm text-copper-deep">
-      {{ error }}
+      {{ renderMessage(error) }}
     </p>
 
     <div v-if="busy && outline" class="surface-inset mt-4 p-3.5">
@@ -175,19 +179,19 @@ async function onCopy() {
     </div>
 
     <template v-if="hasContent">
-      <p v-if="result && result.truncated" class="mt-4 text-sm text-stone">字幕较长，这次只覆盖了开头。</p>
-      <h3 class="result-title mt-6">大纲</h3>
+      <p v-if="result && result.truncated" class="mt-4 text-sm text-stone">{{ t('summary.truncated') }}</p>
+      <h3 class="result-title mt-6">{{ t('summary.outline') }}</h3>
       <div class="surface-inset mt-2.5 px-4 py-3.5">
         <MarkdownView :text="outline" />
       </div>
-      <h3 v-if="points.length" class="result-title mt-6">要点</h3>
+      <h3 v-if="points.length" class="result-title mt-6">{{ t('summary.points') }}</h3>
       <ul v-if="points.length" class="mt-3 space-y-2">
         <li v-for="(item, index) in points" :key="index" class="flex items-start gap-2.5 text-sm leading-6 text-ink">
           <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-copper"></span>
           <MarkdownView class="min-w-0 break-words" :text="item" inline />
         </li>
       </ul>
-      <h3 v-if="chapters.length" class="result-title mt-6">章节</h3>
+      <h3 v-if="chapters.length" class="result-title mt-6">{{ t('summary.chapters') }}</h3>
       <ol v-if="chapters.length" class="mt-3 space-y-3">
         <li v-for="(item, index) in chapters" :key="index" class="surface-inset p-3.5">
           <p class="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
@@ -200,7 +204,7 @@ async function onCopy() {
     </template>
 
     <div v-if="!busy && !error && !hasContent" class="empty-state mt-4">
-      点击生成总结，大纲、要点和章节会显示在这里
+      {{ t('summary.empty') }}
     </div>
   </article>
 </template>

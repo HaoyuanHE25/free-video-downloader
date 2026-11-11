@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   node: { type: Object, required: true },
@@ -7,6 +8,8 @@ const props = defineProps({
   collapsed: { type: Object, required: true },
 })
 const emit = defineEmits(['toggle'])
+
+const { t } = useI18n()
 
 const hasChildren = computed(() => (props.node.children || []).length > 0)
 const open = computed(() => hasChildren.value && !props.collapsed[props.node.id])
@@ -23,7 +26,7 @@ const open = computed(() => hasChildren.value && !props.collapsed[props.node.id]
         type="button"
         class="mt-0.5 inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-line bg-card text-xs text-ink"
         :aria-expanded="open"
-        :aria-label="open ? '收起' : '展开'"
+        :aria-label="open ? t('mindmap.collapse') : t('mindmap.expand')"
         @click="emit('toggle', node.id)"
       >
         {{ open ? '−' : '+' }}

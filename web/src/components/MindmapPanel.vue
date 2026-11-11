@@ -1,10 +1,14 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { renderMessage, stageMessage } from '../i18n/messages.js'
 import { streamMindmap } from '../summaryApi.js'
 
 const props = defineProps({
   url: { type: String, default: '' },
 })
+
+const { t } = useI18n()
 
 const busy = ref(false)
 const status = ref('')
@@ -42,7 +46,7 @@ const MAX_ZOOM = 4
 let canvasContext = null
 
 function cleanLabel(value, limit = 52) {
-  const text = String(value || '').replace(/\s+/g, ' ').trim() || '未命名'
+  const text = String(value || '').replace(/\s+/g, ' ').trim() || t('mindmap.untitled')
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text
 }
 
@@ -168,13 +172,13 @@ async function onGenerate() {
   if (busy.value) return
   const target = props.url.trim()
   if (!target) {
-    error.value = '请先在上方粘贴视频链接'
+    error.value = 'error.needUrl'
     return
   }
   controller?.abort()
   controller = new AbortController()
   error.value = ''
-  status.value = '正在生成导图'
+  status.value = 'stage.building'
   busy.value = true
   reset()
   try {
@@ -183,21 +187,21 @@ async function onGenerate() {
       (block) => {
         const data = block.data || {}
         if (block.event === 'status') {
-          status.value = data.message || ''
+          status.value = stageMessage(data.stage, data.message)
         } else if (block.event === 'tree') {
           tree.value = data.root
         } else if (block.event === 'done') {
           const result = data.result || {}
           if (result.root) tree.value = result.root
         } else if (block.event === 'error') {
-          throw new Error(data.message || '思维导图生成失败，请重试')
+          throw new Error(data.message || 'error.mindmapFailed')
         }
       },
       controller.signal,
     )
   } catch (err) {
     if (err.name === 'AbortError') return
-    error.value = err.message || '思维导图生成失败，请重试'
+    error.value = err.message || 'error.mindmapFailed'
   } finally {
     busy.value = false
     status.value = ''
@@ -223,7 +227,7 @@ async function copySource() {
     copied.value = true
   } catch {
     copied.value = false
-    error.value = '复制没有完成，请重试'
+    error.value = 'common.copyFailed'
   }
 }
 
@@ -301,7 +305,7 @@ function fileStamp() {
 
 function fileBase() {
   const label = cleanLabel(tree.value?.label, 24).replace(/[\\/:*?"<>|\s]+/g, '-')
-  return `思维导图-${label || '未命名'}-${fileStamp()}`
+  return `${t('mindmap.filePrefix')}-${label || t('mindmap.untitled')}-${fileStamp()}`
 }
 
 function saveBlob(blob, filename) {
@@ -339,7 +343,7 @@ function loadImage(url) {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('图片加载失败'))
+    image.onerror = () => reject(new Error('error.imageLoad'))
     image.src = url
   })
 }
@@ -363,10 +367,10 @@ async function downloadPng() {
     context.fillRect(0, 0, canvas.width, canvas.height)
     context.drawImage(image, 0, 0, canvas.width, canvas.height)
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
-    if (!blob) throw new Error('图片导出失败')
+    if (!blob) throw new Error('error.imageExport')
     saveBlob(blob, `${fileBase()}.png`)
   } catch {
-    error.value = '图片导出失败，请重试'
+    error.value = 'error.imageExport'
   } finally {
     URL.revokeObjectURL(url)
     exporting.value = false
@@ -390,30 +394,30 @@ onUnmounted(() => {
     <div class="flex flex-wrap items-center justify-between gap-2">
       <p class="flex items-center gap-2 text-xs text-stone">
         <span class="h-1.5 w-1.5 shrink-0 rounded-full" :class="busy ? 'animate-pulse bg-copper' : 'bg-copper/60'"></span>
-        {{ busy ? status || '正在处理' : tree ? '导图已生成' : '根据链接生成结构清晰的思维导图' }}
+        {{ busy ? renderMessage(status) || t('mindmap.busy') : tree ? t('mindmap.done') : t('mindmap.idle') }}
       </p>
       <div v-if="tree" class="flex flex-wrap items-center gap-1">
-        <button type="button" class="btn-quiet" @click="openFullscreen">全屏</button>
+        <button type="button" class="btn-quiet" @click="openFullscreen">{{ t('mindmap.fullscreen') }}</button>
         <button type="button" class="btn-quiet" :disabled="exporting" @click="downloadPng">
-          {{ exporting ? '导出中' : '下载 PNG' }}
+          {{ exporting ? t('mindmap.exporting') : t('mindmap.downloadPng') }}
         </button>
-        <button type="button" class="btn-quiet" @click="downloadSvg">下载 SVG</button>
+        <button type="button" class="btn-quiet" @click="downloadSvg">{{ t('mindmap.downloadSvg') }}</button>
         <button type="button" class="btn-quiet" @click="copySource">
-          {{ copied ? '已复制' : '复制大纲' }}
+          {{ copied ? t('mindmap.copied') : t('mindmap.copyOutline') }}
         </button>
       </div>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-3">
       <button type="button" class="btn-primary" :disabled="!canRun" @click="onGenerate">
-        {{ busy ? '正在生成' : tree ? '重新生成' : '生成导图' }}
+        {{ busy ? t('mindmap.actionBusy') : tree ? t('mindmap.actionAgain') : t('mindmap.action') }}
       </button>
     </div>
 
-    <p v-if="!ready && !busy" class="mt-3 text-xs text-stone">先在上方粘贴视频链接，再点击生成导图。</p>
+    <p v-if="!ready && !busy" class="mt-3 text-xs text-stone">{{ t('mindmap.emptyReady') }}</p>
 
     <p v-if="error" class="mt-3 rounded-xl border border-white/70 bg-white/50 px-3.5 py-2.5 text-sm text-copper-deep">
-      {{ error }}
+      {{ renderMessage(error) }}
     </p>
 
     <div v-if="layout" class="mindmap-view mt-4 overflow-auto rounded-[16px] border border-white/70 bg-white/55 p-2.5 backdrop-blur-md">
@@ -423,7 +427,7 @@ onUnmounted(() => {
         :style="{ width: `${layout.width}px`, height: `${layout.height}px`, fontFamily: FONT_STACK }"
         class="block"
         role="img"
-        aria-label="视频思维导图"
+        :aria-label="t('mindmap.ariaView')"
       >
         <rect :width="layout.width" :height="layout.height" fill="#ffffff" />
         <path
@@ -461,30 +465,30 @@ onUnmounted(() => {
     </div>
 
     <div v-else-if="!busy && !error" class="empty-state mt-4">
-      点击生成导图，结构图会显示在这里
+      {{ t('mindmap.empty') }}
     </div>
 
     <Teleport to="body">
-      <div v-if="expanded && layout" class="mm-modal" role="dialog" aria-modal="true" aria-label="思维导图全屏">
+      <div v-if="expanded && layout" class="mm-modal" role="dialog" aria-modal="true" :aria-label="t('mindmap.modalLabel')">
         <header class="mm-bar">
           <div class="flex min-w-0 items-center gap-2">
-            <span class="mm-title">思维导图</span>
+            <span class="mm-title">{{ t('mindmap.modalTitle') }}</span>
             <span class="rounded-full bg-cream px-2 py-0.5 text-xs tabular-nums text-stone">{{ zoomPercent }}%</span>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-1.5">
-            <button type="button" class="btn-quiet" @click="fitToScreen">适应屏幕</button>
-            <button type="button" class="mm-icon" aria-label="缩小" @click="zoomBy(-0.15)">−</button>
-            <button type="button" class="mm-icon" aria-label="放大" @click="zoomBy(0.15)">＋</button>
+            <button type="button" class="btn-quiet" @click="fitToScreen">{{ t('mindmap.fit') }}</button>
+            <button type="button" class="mm-icon" :aria-label="t('mindmap.zoomOut')" @click="zoomBy(-0.15)">−</button>
+            <button type="button" class="mm-icon" :aria-label="t('mindmap.zoomIn')" @click="zoomBy(0.15)">＋</button>
             <span class="mm-divider"></span>
-            <select v-model.number="exportScale" class="mm-select" aria-label="PNG 清晰度">
+            <select v-model.number="exportScale" class="mm-select" :aria-label="t('mindmap.pngScale')">
               <option :value="2">PNG 2x</option>
               <option :value="3">PNG 3x</option>
             </select>
             <button type="button" class="btn-secondary" :disabled="exporting" @click="downloadPng">
-              {{ exporting ? '导出中' : '下载 PNG' }}
+              {{ exporting ? t('mindmap.exporting') : t('mindmap.downloadPng') }}
             </button>
-            <button type="button" class="btn-secondary" @click="downloadSvg">下载 SVG</button>
-            <button type="button" class="mm-icon" aria-label="关闭全屏" @click="closeFullscreen">×</button>
+            <button type="button" class="btn-secondary" @click="downloadSvg">{{ t('mindmap.downloadSvg') }}</button>
+            <button type="button" class="mm-icon" :aria-label="t('mindmap.closeFullscreen')" @click="closeFullscreen">×</button>
           </div>
         </header>
         <div
@@ -503,7 +507,7 @@ onUnmounted(() => {
               :style="{ width: `${layout.width}px`, height: `${layout.height}px`, fontFamily: FONT_STACK }"
               class="block"
               role="img"
-              aria-label="视频思维导图全屏"
+              :aria-label="t('mindmap.ariaFullscreenView')"
             >
               <rect :width="layout.width" :height="layout.height" fill="#ffffff" />
               <path
@@ -540,7 +544,7 @@ onUnmounted(() => {
             </svg>
           </div>
         </div>
-        <p class="mm-hint">拖动查看 · 滚轮缩放 · Esc 关闭</p>
+        <p class="mm-hint">{{ t('mindmap.hint') }}</p>
       </div>
     </Teleport>
   </article>

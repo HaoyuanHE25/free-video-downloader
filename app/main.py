@@ -7,7 +7,7 @@ import re
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -15,9 +15,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from starlette.background import BackgroundTask
 
-from app import downloader
+from app import downloader, membership
 from app.downloader import UserFacingError, fetch_cover, parse, validate_format_id, validate_public_url
 from app.jobs import store
+from app.member_routes import current_user
+from app.member_routes import router as member_router
 from app.summary_routes import router as summary_router
 
 
@@ -102,13 +104,29 @@ def parse_video(body: ParseRequest):
 
 
 @app.post("/api/download")
-def start_download(body: DownloadRequest):
+def start_download(body: DownloadRequest, request: Request):
     url = _public_url(body.url)
+    user = current_user(request)
+    limits = membership.limits_for(user)
     try:
         format_id = validate_format_id(body.format_id)
         if "+" in format_id and not downloader.ffmpeg_available():
             raise UserFacingError("需要安装 ffmpeg，才能把画面和声音合成一个文件")
-        job_id = store.submit(url, format_id)
+        quota_subject = None
+        if limits.tier != membership.MEMBER_LIMITS.tier:
+            quota_subject = membership.usage_subject(user, _client_ip(request))
+            if not membership.consume_daily_quota(quota_subject):
+                raise HTTPException(
+                    429,
+                    f"今天的 {membership.FREE_DAILY_DOWNLOADS} 次免费下载已用完，明天 0 点恢复；"
+                    "开通会员可无限下载",
+                )
+        try:
+            job_id = store.submit(url, format_id, limits=limits)
+        except Exception:
+            if quota_subject is not None:
+                membership.refund_daily_quota(quota_subject)
+            raise
     except UserFacingError as exc:
         raise HTTPException(exc.status, exc.message) from exc
     return {"job_id": job_id}
@@ -147,6 +165,15 @@ def read_job_file(job_id: str):
     )
 
 
+def _client_ip(request: Request) -> str:
+    """游客按 IP 计次。部署在反向代理后面时设 TRUST_PROXY=1 才会采信 X-Forwarded-For。"""
+    if os.environ.get("TRUST_PROXY", "").strip() == "1":
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
+
+
 def _public_url(url: str) -> str:
     try:
         return validate_public_url(url)
@@ -154,6 +181,7 @@ def _public_url(url: str) -> str:
         raise HTTPException(exc.status, exc.message) from exc
 
 
+app.include_router(member_router)
 app.include_router(summary_router)
 
 if _DIST.is_dir() and (_DIST / "index.html").is_file():

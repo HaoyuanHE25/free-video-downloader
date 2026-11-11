@@ -1,4 +1,4 @@
-"""薄封装：校验公开链接，调用 yt-dlp，把格式收成少数清晰度。"""
+"""薄封装：校验公开链接，调用解析引擎，把格式收成少数清晰度。"""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ DOWNLOAD_TIMEOUT_SECONDS = 10 * 60
 FORMAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,80}$")
 _INVALID_FILENAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
-# 测试会替换这个类。保持为 None 时才真正导入 yt-dlp。
-YoutubeDL = None
+# 测试会替换这个类。保持为 None 时才真正导入解析引擎。
+Engine = None
 
 BANDS = (
     ("1080p", 721, 1080),
@@ -43,6 +43,12 @@ class UserFacingError(Exception):
 
 def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
+
+
+def size_label(size: int) -> str:
+    if size >= 1024 * 1024 * 1024 and size % (1024 * 1024 * 1024) == 0:
+        return f"{size // (1024 * 1024 * 1024)}GB"
+    return f"{max(size // (1024 * 1024), 1)}MB"
 
 
 _HOST_PATH = re.compile(r"^(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:[/:?#]|$)")
@@ -101,8 +107,8 @@ def parse(url: str) -> dict:
         return presented
     opts = _base_opts(page_url=url)
     try:
-        with _ydl(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        with _engine(opts) as engine:
+            info = engine.extract_info(url, download=False)
     except UserFacingError:
         raise
     except Exception as exc:
@@ -115,16 +121,33 @@ def parse(url: str) -> dict:
     return presented
 
 
-def download_media(url: str, format_id: str, directory: Path, on_progress) -> tuple[Path, str]:
+def download_media(
+    url: str,
+    format_id: str,
+    directory: Path,
+    on_progress,
+    *,
+    max_bytes: int | None = None,
+    timeout_seconds: float | None = None,
+) -> tuple[Path, str]:
     from app import douyin
 
+    limit_bytes = MAX_FILE_BYTES if max_bytes is None else max_bytes
+    limit_seconds = DOWNLOAD_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
     if douyin.matches(url):
-        return douyin.download(url, format_id, directory, on_progress)
+        return douyin.download(
+            url,
+            format_id,
+            directory,
+            on_progress,
+            max_bytes=limit_bytes,
+            timeout_seconds=limit_seconds,
+        )
     directory.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
 
     def hook(event: dict) -> None:
-        if time.monotonic() - started > DOWNLOAD_TIMEOUT_SECONDS:
+        if time.monotonic() - started > limit_seconds:
             raise UserFacingError("下载超时，请换一条较短的公开视频")
         if event.get("status") != "downloading":
             return
@@ -137,7 +160,7 @@ def download_media(url: str, format_id: str, directory: Path, on_progress) -> tu
         {
             "format": format_id,
             "outtmpl": str(directory / "media.%(ext)s"),
-            "max_filesize": MAX_FILE_BYTES,
+            "max_filesize": limit_bytes,
             "progress_hooks": [hook],
             "overwrites": True,
             "fragment_retries": 5,
@@ -147,21 +170,21 @@ def download_media(url: str, format_id: str, directory: Path, on_progress) -> tu
     if "+" in format_id:
         opts["merge_output_format"] = "mp4"
     try:
-        with _ydl(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        with _engine(opts) as engine:
+            info = engine.extract_info(url, download=True)
     except UserFacingError:
         raise
     except Exception as exc:
         log.warning("download failed: %s", exc)
-        raise UserFacingError(_humanize_download(exc)) from exc
+        raise UserFacingError(_humanize_download(exc, limit_bytes)) from exc
     info = _single_info(info) or {}
     files = _output_files(directory)
     if not files:
         raise UserFacingError("下载没有完成，请重试")
     path = max(files, key=lambda item: item.stat().st_size)
-    if path.stat().st_size > MAX_FILE_BYTES:
+    if path.stat().st_size > limit_bytes:
         path.unlink(missing_ok=True)
-        raise UserFacingError("文件超过约 500MB，请换较低清晰度")
+        raise UserFacingError(f"文件超过约 {size_label(limit_bytes)}，请换较低清晰度")
     on_progress(1)
     title = info.get("title") or "video"
     return path, safe_filename(str(title), path.suffix.lstrip("."))
@@ -254,14 +277,14 @@ def safe_filename(title: str, ext: str) -> str:
     return f"{cleaned}.{suffix}"
 
 
-def _ydl(opts: dict):
-    cls = YoutubeDL
+def _engine(opts: dict):
+    cls = Engine
     if cls is None:
         try:
             from yt_dlp import YoutubeDL as imported
         except ImportError as exc:
-            raise UserFacingError("服务器还没有安装 yt-dlp", 500) from exc
-        globals()["YoutubeDL"] = imported
+            raise UserFacingError("服务器还没有安装解析引擎", 500) from exc
+        globals()["Engine"] = imported
         cls = imported
     return cls(opts)
 
@@ -576,10 +599,10 @@ def _status_for_parse(exc: Exception) -> int:
     return 502
 
 
-def _humanize_download(exc: Exception) -> str:
+def _humanize_download(exc: Exception, limit_bytes: int = MAX_FILE_BYTES) -> str:
     text = str(exc).lower()
     if "max_filesize" in text or "larger than max" in text or "file is larger" in text:
-        return "文件超过约 500MB，请换较低清晰度"
+        return f"文件超过约 {size_label(limit_bytes)}，请换较低清晰度"
     if "timed out" in text or "timeout" in text:
         return "下载超时，请换一条较短的公开视频"
     if "unsupported url" in text:

@@ -16,7 +16,7 @@ from app.downloader import (
     BILIBILI_REFERER,
     UserFacingError,
     _base_opts,
-    _ydl,
+    _engine,
     validate_public_url,
 )
 
@@ -177,7 +177,7 @@ def _collect(url: str, directory: Path) -> list[dict]:
         cues = _bilibili_cues(url)
         if cues:
             return cues
-    return _ytdlp_cues(url, directory)
+    return _engine_cues(url, directory)
 
 
 def _is_bilibili(url: str) -> bool:
@@ -293,7 +293,7 @@ def _caption_urls(node, found: list[tuple[str, str]]) -> None:
             _caption_urls(item, found)
 
 
-def _ytdlp_cues(url: str, directory: Path) -> list[dict]:
+def _engine_cues(url: str, directory: Path) -> list[dict]:
     opts = _base_opts(
         {
             "skip_download": True,
@@ -307,8 +307,8 @@ def _ytdlp_cues(url: str, directory: Path) -> list[dict]:
         page_url=url,
     )
     try:
-        with _ydl(opts) as ydl:
-            ydl.extract_info(url, download=True)
+        with _engine(opts) as engine:
+            engine.extract_info(url, download=True)
     except UserFacingError:
         raise
     except Exception as exc:

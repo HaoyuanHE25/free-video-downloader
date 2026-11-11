@@ -26,7 +26,7 @@ async function requestError(response) {
   } catch {
     // 不是 JSON 就走兜底文案
   }
-  return '请求没有完成，请重试'
+  return 'error.generic'
 }
 
 async function streamRequest(path, payload, onEvent, signal) {
@@ -37,7 +37,7 @@ async function streamRequest(path, payload, onEvent, signal) {
     signal,
   })
   if (!response.ok) throw new Error(await requestError(response))
-  if (!response.body) throw new Error('当前浏览器不支持流式响应')
+  if (!response.body) throw new Error('error.streamUnsupported')
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''

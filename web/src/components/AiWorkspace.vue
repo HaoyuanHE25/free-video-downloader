@@ -1,21 +1,24 @@
 <script setup>
-import { defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 defineProps({
   url: { type: String, default: '' },
 })
+
+const { t } = useI18n()
 
 const SummaryPanel = defineAsyncComponent(() => import('./SummaryPanel.vue'))
 const SubtitlePanel = defineAsyncComponent(() => import('./SubtitlePanel.vue'))
 const MindmapPanel = defineAsyncComponent(() => import('./MindmapPanel.vue'))
 const QaPanel = defineAsyncComponent(() => import('./QaPanel.vue'))
 
-const tabs = [
-  { id: 'summary', label: '总结', desc: '大纲 · 要点 · 章节' },
-  { id: 'subtitle', label: '字幕', desc: '解析 · 分段 · 导出' },
-  { id: 'mindmap', label: '导图', desc: '结构图 · 曲线分支' },
-  { id: 'qa', label: '问答', desc: '基于内容追问' },
-]
+const tabs = computed(() => [
+  { id: 'summary', label: t('workspace.summary'), desc: t('workspace.summaryDesc') },
+  { id: 'subtitle', label: t('workspace.subtitle'), desc: t('workspace.subtitleDesc') },
+  { id: 'mindmap', label: t('workspace.mindmap'), desc: t('workspace.mindmapDesc') },
+  { id: 'qa', label: t('workspace.qa'), desc: t('workspace.qaDesc') },
+])
 
 const panels = {
   summary: SummaryPanel,
@@ -37,10 +40,11 @@ function onTabKey(event, index) {
   const backward = event.key === 'ArrowLeft' || event.key === 'ArrowUp'
   if (!forward && !backward) return
   event.preventDefault()
-  const next = (index + (forward ? 1 : -1) + tabs.length) % tabs.length
-  select(tabs[next].id)
-  const list = event.currentTarget.closest('[role="tablist"]')
-  list?.querySelectorAll('[role="tab"]')[next]?.focus()
+  const list = tabs.value
+  const next = (index + (forward ? 1 : -1) + list.length) % list.length
+  select(list[next].id)
+  const rail = event.currentTarget.closest('[role="tablist"]')
+  rail?.querySelectorAll('[role="tab"]')[next]?.focus()
 }
 </script>
 
@@ -48,7 +52,7 @@ function onTabKey(event, index) {
   <section id="workspace" class="mx-auto mt-4 w-full scroll-mt-20 sm:mt-5" aria-live="polite">
     <!-- 移动端 / 平板：横向吸顶标签 -->
     <div class="glass-bar sticky top-14 z-10 -mx-4 px-4 py-2 lg:hidden">
-      <div class="segmented mx-auto flex w-full max-w-[560px]" role="tablist" aria-label="工作台功能">
+      <div class="segmented mx-auto flex w-full max-w-[560px]" role="tablist" :aria-label="t('workspace.tabsLabel')">
         <button
           v-for="(tab, index) in tabs"
           :key="tab.id"
@@ -82,7 +86,7 @@ function onTabKey(event, index) {
     <!-- 桌面端：左侧垂直标签 + 右侧内容 -->
     <div class="lg:flex lg:items-start lg:gap-5">
       <aside class="hidden lg:sticky lg:top-20 lg:block lg:w-[236px] lg:shrink-0">
-        <div class="tab-rail" role="tablist" aria-label="工作台功能">
+        <div class="tab-rail" role="tablist" :aria-label="t('workspace.tabsLabel')">
           <button
             v-for="(tab, index) in tabs"
             :key="tab.id"
@@ -151,7 +155,7 @@ function onTabKey(event, index) {
             ></span>
           </button>
         </div>
-        <p class="mt-3 px-2 text-[11px] leading-5 text-stone-light">同一条链接，四种解读方式</p>
+        <p class="mt-3 px-2 text-[11px] leading-5 text-stone-light">{{ t('workspace.note') }}</p>
       </aside>
 
       <div class="mt-3 min-w-0 flex-1 sm:mt-4 lg:mt-0">

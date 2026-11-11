@@ -1,10 +1,13 @@
 <script setup>
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import MindMapNode from './MindMapNode.vue'
 
 const props = defineProps({
   root: { type: Object, required: true },
 })
+
+const { t } = useI18n()
 
 const collapsed = ref({})
 
@@ -38,8 +41,8 @@ watch(
 <template>
   <div class="rounded-xl border border-line bg-cream/50 p-3">
     <div class="mb-2 flex justify-end gap-3 text-xs text-copper-deep">
-      <button type="button" class="cursor-pointer" @click="expandAll">全部展开</button>
-      <button type="button" class="cursor-pointer" @click="collapseAll">全部收起</button>
+      <button type="button" class="cursor-pointer" @click="expandAll">{{ t('mindmap.expandAll') }}</button>
+      <button type="button" class="cursor-pointer" @click="collapseAll">{{ t('mindmap.collapseAll') }}</button>
     </div>
     <MindMapNode :node="root" :collapsed="collapsed" @toggle="toggle" />
   </div>
